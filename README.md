@@ -2,7 +2,20 @@
 
 ## how to use this repo
 
-### clone this repo
+- clone this repo
+```
+git clone https://github.com/kikitux/lima-playground.git
+```
+
+- change directory
+```
+cd lima-playground
+```
+
+- install pre requirements
+```
+bash ./setup.sh
+```
 
 ### use any of the projects
 

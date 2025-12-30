@@ -31,7 +31,7 @@ cd lima-<name>
 ### kubernetes
 
 - [lima-k8s](lima-k8s) a vm using k8s template from lima
-- [lima-kind](lima-kind) am vm using latest kind
+- [lima-kind](lima-kind) a vm using latest kind
 
 ### microshift
 - [lima-microshift-minc](lima-microshift-minc) a vm using minc ( microshift in container )

@@ -25,15 +25,15 @@ cd lima-<name>
 ## whats included
 
 ### generic
-- lima-aarch64 a vm set for aarch64, will work on x86_64
-- lima-x86_64 a vm set for x86_64, will work on aarch64
+- [lima-aarch64](lima-aarch64) a vm set for aarch64, will work on x86_64
+- [lima-x86_64](lima-x86_64) a vm set for x86_64, will work on aarch64
 
 ### kubernets
 
-- lima-k8s a vm using k8s template from lima
-- lima-kind am vm using latest kind
+- [lima-k8s](lima-k8s) a vm using k8s template from lima
+- [lima-kind](lima-kind) am vm using latest kind
 
 ### microshift
-- lima-microshift-minc a vm using minc ( microshift in container )
-- lima-microshift-rpm a vm using microshift rpms
+- [lima-microshift-minc](lima-microshift-minc) a vm using minc ( microshift in container )
+- [lima-microshift-rpm](lima-microshift-rpm) a vm using microshift rpms
 

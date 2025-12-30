@@ -1,0 +1,4 @@
+vmType: qemu
+arch: aarch64
+
+base: template:podman-rootful

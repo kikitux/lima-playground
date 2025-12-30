@@ -1,0 +1,341 @@
+# Lima VM template for MicroShift
+# Usage: limactl start --name=microshift ./microshift.yaml
+#
+# This template installs MicroShift from upstream releases at:
+# https://github.com/microshift-io/microshift/releases
+#
+# MicroShift is optimized OpenShift for edge computing using OKD components
+# Supports both x86_64 and aarch64 architectures
+
+minimumLimaVersion: 2.0.0
+
+base: template:_images/centos-stream-9
+
+vmType: "qemu"
+
+# VM specs
+cpus: 4
+memory: "8GiB"
+disk: "100GiB"
+
+# Additional disks for LVM
+additionalDisks:
+  - name: "microshift-data"
+    format: false
+
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH settings
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+firmware:
+  legacyBIOS: false
+
+video:
+  display: "none"
+
+# Port forwards for MicroShift services
+portForwards:
+  - guestPort: 6443
+    hostPort: 6443
+    proto: tcp
+  - guestPort: 80
+    hostPort: 8080
+    proto: tcp
+  - guestPort: 443
+    hostPort: 8443
+    proto: tcp
+
+# Copy kubeconfig from guest to host automatically
+copyToHost:
+  - guest: "/var/lib/microshift/resources/kubeadmin/kubeconfig"
+    host: "{{.Dir}}/copied-from-guest/kubeconfig"
+    deleteOnStop: false
+
+# Provisioning - files first, then scripts
+provision:
+
+  # Create microshift repo file template (will be updated by script)
+  - mode: data
+    path: /etc/yum.repos.d/microshift-io.repo.template
+    owner: "root:root"
+    permissions: 644
+    content: |
+      [microshift-io]
+      name=Microshift-io
+      baseurl=file:///root/microshift/
+      repo_gpgcheck=0
+      gpgcheck=0
+      gpgkey=
+      enabled=1
+      sslverify=1
+      priority=50
+
+      [openshift-dependencies]
+      name=openshift-dependencies
+      baseurl=DEPENDENCIES_URL_PLACEHOLDER
+      repo_gpgcheck=0
+      gpgcheck=0
+      gpgkey=
+      enabled=1
+      sslverify=1
+      priority=50
+
+  # Create MicroShift config
+  - mode: data
+    path: /etc/microshift/config.yaml
+    owner: "root:root"
+    permissions: 644
+    content: |
+      dns:
+          baseDomain: 127.0.0.1.nip.io
+
+  # Create postinstall.sh script
+  - mode: data
+    path: /root/postinstall.sh
+    owner: "root:root"
+    permissions: 755
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      set -x
+
+      install_cni_plugins() {
+          # If containernetworking-plugins is already installed, exit
+          if rpm -q containernetworking-plugins &>/dev/null; then
+              return 0
+          fi
+
+          # Set the package version and name
+          CNP_VER=v1.8.0
+          CNP_PKG="cni-plugins-linux-amd64-${CNP_VER}.tgz"
+          [ "$(uname -m)" = "aarch64" ] && CNP_PKG="cni-plugins-linux-arm64-${CNP_VER}.tgz"
+
+          # Download the package
+          curl -sSL --retry 5 -o "/tmp/${CNP_PKG}" \
+              "https://github.com/containernetworking/plugins/releases/download/${CNP_VER}/${CNP_PKG}"
+
+          # Extract the package into the CNI plugins directory
+          mkdir -p /usr/libexec/cni
+          tar zxvf "/tmp/${CNP_PKG}" -C /usr/libexec/cni
+
+          # Clean up
+          rm -f "/tmp/${CNP_PKG}"
+      }
+
+      #
+      # Main
+      #
+      # Check if the script is running as root
+      if [ "$(id -u)" -ne 0 ]; then
+          echo "ERROR: This script must be run as root (use sudo)"
+          exit 1
+      fi
+
+      # Configure network and add some useful utilities
+      dnf install -y firewalld jq bash-completion
+      firewall-offline-cmd --zone=trusted --add-source=10.42.0.0/16
+      firewall-offline-cmd --zone=trusted --add-source=169.254.169.1
+      firewall-offline-cmd --zone=public --add-port=6443/tcp
+
+      # Configure limits for cAdvisor and kubelet
+      cat > /etc/sysctl.d/99-microshift.conf <<EOF
+      fs.inotify.max_user_watches = 524288
+      fs.inotify.max_user_instances = 16384
+      EOF
+
+      # With kindnet present, disable services
+      if rpm -q microshift-kindnet &>/dev/null; then
+          systemctl disable openvswitch      &>/dev/null || true
+          systemctl disable systemd-resolved &>/dev/null || true
+
+          install_cni_plugins
+      fi
+
+      # Create a link to the default kubeconfig
+      [ -d /root/.kube ] && rm -fr /root/.kube/
+      mkdir -p "$(readlink -f /root)/.kube"
+      ln -s /var/lib/microshift/resources/kubeadmin/kubeconfig /root/.kube/config
+
+      # Enable the MicroShift service
+      systemctl enable microshift
+      systemctl start microshift
+
+      # Wait for kubeconfig to be created
+      while [ ! -f "/var/lib/microshift/resources/kubeadmin/kubeconfig" ]; do
+        echo "waiting on kubeconfig to be created, sleeping 5 seconds"
+        sleep 5
+      done
+
+      # Copy kubeconfig to shared location
+      mkdir -p /tmp/lima
+      cp /var/lib/microshift/resources/kubeadmin/kubeconfig /tmp/lima/kubeconfig
+      chmod 644 /tmp/lima/kubeconfig
+      echo "Kubeconfig available at /tmp/lima/kubeconfig"
+
+  # Create vscode tunnel script
+  - mode: data
+    path: /root/tunnel.sh
+    owner: "root:root"
+    permissions: 755
+    content: |
+      #!/bin/bash
+      # vscode tunnel
+      set -eux -o pipefail
+
+      cd /root
+
+      [ -f ./code ] || {
+        ARCH=x64
+        [ "$(uname -m)" = "aarch64" ] && ARCH=arm64
+        curl -Lk "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-${ARCH}" --output vscode_cli.tar.gz
+        tar -xf vscode_cli.tar.gz
+      }
+
+      export KUBECONFIG=/var/lib/microshift/resources/kubeadmin/kubeconfig
+      ./code tunnel
+
+  # Setup LVM on additional disk
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      dnf install -y lvm2
+      while [ ! -e /dev/vdb ]; do
+        echo "Waiting for /dev/vdb..."
+        sleep 2
+      done
+      pvcreate -f /dev/vdb
+      vgcreate myvg1 /dev/vdb
+
+  # Download and setup MicroShift
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      dnf install -y wget curl jq
+
+      # Detect architecture
+      ARCH=x86_64
+      [ "$(uname -m)" = "aarch64" ] && ARCH=aarch64
+
+      # Get the latest release tag from GitHub API
+      RELEASE_TAG=$(curl -sL \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        https://api.github.com/repos/microshift-io/microshift/releases/latest | jq -r .tag_name)
+
+      echo "Latest release tag: $RELEASE_TAG"
+
+      # Extract version (major.minor) from tag like: 4.21.0_g29f429c21_4.21.0_okd_scos.ec.15
+      VERSION=$(echo "$RELEASE_TAG" | sed -n 's|^\([0-9]*\.[0-9]*\)\..*|\1|p')
+
+      if [ -z "$VERSION" ]; then
+        echo "ERROR: Could not extract version from release tag: $RELEASE_TAG"
+        exit 1
+      fi
+
+      echo "Detected MicroShift version: $VERSION"
+
+      # Download MicroShift RPMs
+      DOWNLOAD_URL="https://github.com/microshift-io/microshift/releases/latest/download/microshift-rpms-${ARCH}.tgz"
+      wget -P /tmp/ "$DOWNLOAD_URL"
+      mkdir -p /root/microshift
+      tar -C /root/microshift/ -zxvf /tmp/microshift-rpms-${ARCH}.tgz
+
+      # Create the repo file with the detected version
+      DEPS_URL="https://mirror.openshift.com/pub/openshift-v4/${ARCH}/dependencies/rpms/${VERSION}-el9-beta/"
+      echo "Using dependencies URL: $DEPS_URL"
+
+      sed "s|DEPENDENCIES_URL_PLACEHOLDER|${DEPS_URL}|g" \
+        /etc/yum.repos.d/microshift-io.repo.template > \
+        /etc/yum.repos.d/microshift-io.repo
+
+      # Verify the repo file
+      cat /etc/yum.repos.d/microshift-io.repo
+
+      dnf clean all
+      dnf makecache --disablerepo='*' --enablerepo='microshift-io'
+
+  # Install MicroShift packages
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      dnf install -y openshift-clients cri-tools cri-o microshift-greenboot microshift-selinux microshift microshift-networking microshift-release-info microshift-kindnet-release-info microshift-kindnet microshift-topolvm-release-info microshift-topolvm
+
+  # Configure firewall for web services
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      dnf install -y firewalld
+      firewall-offline-cmd --zone=public --add-port=80/tcp
+      firewall-offline-cmd --zone=public --add-port=443/tcp
+      systemctl daemon-reload
+
+  # Run postinstall script
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      bash /root/postinstall.sh
+
+  # Setup MOTD
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      cat > /etc/motd <<'EOF'
+      ======================================================================
+      MicroShift is installed and running!
+
+      Kubeconfig locations:
+        - /var/lib/microshift/resources/kubeadmin/kubeconfig
+        - /tmp/lima/kubeconfig
+        - ~/.kube/config (symlink)
+
+      Quick commands:
+        - oc get nodes
+        - oc get pods -A
+        - bash /root/tunnel.sh  (start VS Code tunnel)
+
+      From host machine:
+        export KUBECONFIG=$(limactl list microshift --format 'unix://{{.Dir}}/copied-from-guest/kubeconfig')
+        oc get nodes
+      ======================================================================
+      EOF
+
+message: |
+  ======================================================================
+  MicroShift VM is ready!
+
+  Access kubeconfig from host:
+    export KUBECONFIG=$(limactl list microshift --format 'unix://{{.Dir}}/copied-from-guest/kubeconfig')
+    oc get nodes
+    oc get pods -A
+
+  Or manually:
+    limactl shell microshift sudo cat /var/lib/microshift/resources/kubeadmin/kubeconfig > kubeconfig
+    export KUBECONFIG=./kubeconfig
+    oc get nodes
+    oc get pods -A
+
+  Access the VM:
+    limactl shell microshift
+
+  Access services:
+    API Server:  https://localhost:6443
+    HTTP:        http://localhost:8080
+    HTTPS:       https://localhost:8443
+
+  Start VS Code tunnel:
+    limactl shell microshift sudo bash /root/tunnel.sh
+  ======================================================================

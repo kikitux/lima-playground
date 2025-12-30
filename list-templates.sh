@@ -1,0 +1,2 @@
+limactl start --list-templates
+

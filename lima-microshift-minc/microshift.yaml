@@ -1,0 +1,80 @@
+# Lima VM template for microshift bootc on podman using minc
+# Usage: limactl start --name=microshift ./microshift.yaml
+#
+
+minimumLimaVersion: 2.0.0
+
+base: template:podman-rootful
+
+# VM specs
+cpus: 4
+memory: "4GiB"
+
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH settings
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+firmware:
+  legacyBIOS: false
+
+video:
+  display: "none"
+
+# Copy kubeconfig from guest to host automatically
+copyToHost:
+  - guest: "/root/.kube/config"
+    host: "{{.Dir}}/copied-from-guest/kubeconfig"
+    deleteOnStop: false
+
+# Provisioning - files first, then scripts
+provision:
+
+  # Setup minc
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      dnf install -y kubectl curl
+      ARCH=$(uname -m)
+      case "$ARCH" in
+        x86_64) ARCH=amd64 ;;
+        aarch64|arm64) ARCH=arm64 ;;
+        *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+      esac
+
+      curl -Lo /usr/local/bin/minc https://github.com/minc-org/minc/releases/latest/download/minc_linux_${ARCH}
+      chmod +x /usr/local/bin/minc
+
+      hash -r
+      HOME=/root minc create
+      HOME=/root minc generate-kubeconfig
+
+
+message: |
+  ======================================================================
+  Microshift VM is ready!
+
+  Install openshift-cli:
+    brew install openshift-cli
+
+  Access kubeconfig from host:
+    export KUBECONFIG=$(limactl list microshift --format 'unix://{{.Dir}}/copied-from-guest/kubeconfig')
+    oc get nodes
+    oc get pods -A
+
+  Or manually:
+    limactl shell microshift sudo cat /root/.kube/config > kubeconfig
+    export KUBECONFIG=./kubeconfig
+    oc get nodes
+    oc get pods -A
+
+  Access the VM:
+    limactl shell microshift
+  ======================================================================

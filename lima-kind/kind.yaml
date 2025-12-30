@@ -1,0 +1,75 @@
+# Lima VM template for kind on podman
+# Usage: limactl start --name=kind ./kind.yaml
+#
+
+minimumLimaVersion: 2.0.0
+
+base: template:podman-rootful
+
+# VM specs
+cpus: 4
+memory: "4GiB"
+
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH settings
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+firmware:
+  legacyBIOS: false
+
+video:
+  display: "none"
+
+# Copy kubeconfig from guest to host automatically
+copyToHost:
+  - guest: "/root/.kube/config"
+    host: "{{.Dir}}/copied-from-guest/kubeconfig"
+    deleteOnStop: false
+
+# Provisioning - files first, then scripts
+provision:
+
+  # Setup kind
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      dnf install -y kubectl curl #kind 
+      ARCH=$(uname -m)
+      case "$ARCH" in
+        x86_64) ARCH=amd64 ;;
+        aarch64|arm64) ARCH=arm64 ;;
+        *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+      esac
+
+      curl -Lo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/latest/kind-linux-${ARCH}
+      chmod +x /usr/local/bin/kind
+
+      KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster
+      KIND_EXPERIMENTAL_PROVIDER=podman kind export kubeconfig --kubeconfig /root/.kube/config
+
+message: |
+  ======================================================================
+  kind VM is ready!
+
+  Access kubeconfig from host:
+    export KUBECONFIG=$(limactl list kind --format 'unix://{{.Dir}}/copied-from-guest/kubeconfig')
+    kubectl get nodes
+    kubectl get pods -A
+
+  Or manually:
+    limactl shell kind sudo cat /root/.kube/config > kubeconfig
+    export KUBECONFIG=./kubeconfig
+    kubectl get nodes
+    kubectl get pods -A
+
+  Access the VM:
+    limactl shell kind
+  ======================================================================

@@ -1,0 +1,56 @@
+# Lima VM template for k8s
+# Usage: limactl start --name=k8s ./k8s.yaml
+#
+
+minimumLimaVersion: 2.0.0
+
+base: template://k8s
+
+# VM specs
+cpus: 4
+memory: "4GiB"
+
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH settings
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+firmware:
+  legacyBIOS: false
+
+video:
+  display: "none"
+
+# Copy kubeconfig from guest to host automatically
+copyToHost:
+  - guest: "/root/.kube/config"
+    host: "{{.Dir}}/copied-from-guest/kubeconfig"
+    deleteOnStop: false  
+
+message: |
+  ======================================================================
+  k8s VM is ready!
+
+  Install kubectl:
+    brew install kubectl
+
+  Access kubeconfig from host:
+    export KUBECONFIG=$(limactl list k8s --format 'unix://{{.Dir}}/copied-from-guest/kubeconfig.yaml')
+    kubectl get nodes
+    kubectl get pods -A
+
+  Or manually:
+    limactl shell k8s sudo cat /root/.kube/config > kubeconfig
+    export KUBECONFIG=./kubeconfig
+    kubectl get nodes
+    kubectl get pods -A
+
+  Access the VM:
+    limactl shell k8s
+  ======================================================================

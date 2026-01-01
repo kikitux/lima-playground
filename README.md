@@ -17,6 +17,11 @@ cd lima-playground
 bash ./setup.sh
 ```
 
+This will install on macos or linux the following:
+- lima
+- kubectl
+- oc ( Openshift Client )
+
 ### use any of the projects
 
 - change directory

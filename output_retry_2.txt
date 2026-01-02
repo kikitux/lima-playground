@@ -1,0 +1,24 @@
++ set -e
+++ uname
++ OS=Linux
+++ uname -m
++ ARCH=aarch64
++ case "$ARCH" in
++ ARCH=arm64
++ echo 'Detected OS: Linux, Arch: arm64'
+Detected OS: Linux, Arch: arm64
++ echo 'Checking lima installation...'
+Checking lima installation...
++ command -v lima
++ echo 'lima is already installed'
+lima is already installed
++ echo 'Checking kubectl installation...'
+Checking kubectl installation...
++ command -v kubectl
++ echo 'kubectl is already installed'
+kubectl is already installed
++ echo 'Checking oc installation...'
+Checking oc installation...
++ command -v oc
++ echo 'oc is already installed'
+oc is already installed

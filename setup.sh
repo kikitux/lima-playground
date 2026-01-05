@@ -26,36 +26,35 @@ done
 
 if [ "${missing:-false}" = false ]; then
   echo "curl and jq are already installed"
-  exit 0
-fi
+else
+  case "$OS" in
+    Darwin)
+      echo "Installing curl and jq via Homebrew..."
+      brew update
+      brew upgrade
+      brew install curl jq
+      ;;
+    Linux)
+      if command -v dnf &>/dev/null; then
+        echo "Installing curl and jq via dnf..."
+        $SUDO dnf install -y curl jq
 
-case "$OS" in
-  Darwin)
-    echo "Installing curl and jq via Homebrew..."
-    brew update
-    brew upgrade
-    brew install curl jq
-    ;;
-  Linux)
-    if command -v dnf &>/dev/null; then
-      echo "Installing curl and jq via dnf..."
-      $SUDO dnf install -y curl jq
+      elif command -v apt-get &>/dev/null; then
+        echo "Installing curl and jq via apt..."
+        $SUDO apt-get update
+        $SUDO apt-get install -y curl jq
 
-    elif command -v apt-get &>/dev/null; then
-      echo "Installing curl and jq via apt..."
-      $SUDO apt-get update
-      $SUDO apt-get install -y curl jq
-
-    else
-      echo "No supported package manager found" >&2
+      else
+        echo "No supported package manager found" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Unsupported OS: $OS" >&2
       exit 1
-    fi
-    ;;
-  *)
-    echo "Unsupported OS: $OS" >&2
-    exit 1
-    ;;
-esac
+      ;;
+  esac
+fi
 
 # --- Lima Installation ---
 echo "Checking lima installation..."

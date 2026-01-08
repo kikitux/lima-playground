@@ -1,0 +1,36 @@
+# Lima VM template for kind on podman
+# Usage: limactl start --name=kind ./kind.yaml
+#
+
+minimumLimaVersion: 2.0.0
+
+base: template:docker-rootful
+
+# VM specs
+cpus: 4
+memory: "4GiB"
+
+mounts:
+  - location: "~"
+    writable: false
+  - location: "/tmp/lima"
+    writable: true
+
+# SSH settings
+ssh:
+  localPort: 0
+  loadDotSSHPubKeys: true
+
+firmware:
+  legacyBIOS: false
+
+video:
+  display: "none"
+
+message: |
+  ======================================================================
+  Docker VM is ready!
+
+  Access the VM:
+    limactl shell docker
+  ======================================================================

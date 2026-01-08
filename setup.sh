@@ -88,12 +88,14 @@ if [[ $OS == "Linux" ]]; then
 fi
 
 # --- qemu-system-aarch64 Installation ---
-echo "Checking qemu-system-aarch64 installation..."
-if command -v qemu-system-aarch64 &>/dev/null; then
-  echo "qemu-system-aarch64 is already installed"
-else
-  which dnf &>/dev/null && $SUDO dnf install -y qemu-system-aarch64
-  which apt &>/dev/null && $SUDO apt-get update && $SUDO apt-get install -y qemu-system
+if [[ $OS == "Linux" ]]; then
+  echo "Checking qemu-system-aarch64 installation..."
+  if command -v qemu-system-aarch64 &>/dev/null; then
+    echo "qemu-system-aarch64 is already installed"
+  else
+    which dnf &>/dev/null && $SUDO dnf install -y qemu-system-aarch64
+    which apt &>/dev/null && $SUDO apt-get update && $SUDO apt-get install -y qemu-system
+  fi
 fi
 
 

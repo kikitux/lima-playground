@@ -46,8 +46,11 @@ cd lima-<name>
 - [lima-aarch64](lima-aarch64) a vm set for aarch64, will work on x86_64
 - [lima-x86_64](lima-x86_64) a vm set for x86_64, will work on aarch64
 
-### kubernetes
+### container
+- [lima-docker](lima-docker) a vm using docker template from lima
+- [lima-podman](lima-podman) a vm using podman template from lima
 
+### kubernetes
 - [lima-k8s](lima-k8s) a vm using k8s template from lima
 - [lima-kind](lima-kind) a vm using latest kind
 

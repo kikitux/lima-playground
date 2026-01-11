@@ -6,13 +6,12 @@ SUDO=""
 OS=$(uname)
 ARCH=$(uname -m)
 case "$ARCH" in
-  x86_64) ARCH=amd64 ;;
+  x86_64|amd64) ARCH=amd64 ;;
   aarch64|arm64) ARCH=arm64 ;;
   *) echo "Unsupported arch: $ARCH"; exit 1 ;;
 esac
 
 echo "Detected OS: $OS, Arch: $ARCH"
-
 
 # --- curl jq Installation ---
 echo "Checking curl and jq installation..."
